@@ -1,12 +1,3 @@
-// Driver: reads an order stream (from a file argument or stdin) and runs it
-// through the matching engine, printing trades, top-of-book, and book snapshots.
-//
-// Input grammar (one instruction per line; '#' starts a comment):
-//   ADD    <id> <BUY|SELL> <LIMIT|MARKET> <price> <qty>
-//   CANCEL <id>
-//   MODIFY <id> <new_qty>
-//   TOP
-//   PRINT  <N>
 
 #include "OrderBook.h"
 
@@ -17,9 +8,10 @@
 #include <sstream>
 #include <string>
 
+using namespace std;
+
 static void printTrade(const Trade& t) {
-    std::cout << "TRADE " << t.price << ' ' << t.qty << ' '
-              << t.buyId << ' ' << t.sellId << '\n';
+    cout << "TRADE " << t.price << ' ' << t.qty << ' '<< t.buyId << ' ' << t.sellId << '\n';
 }
 
 static void printTop(const OrderBook& book) {
@@ -27,97 +19,127 @@ static void printTop(const OrderBook& book) {
     bool hb = book.bestBid(bid);
     bool ha = book.bestAsk(ask);
 
-    std::cout << "TOP bid ";
-    if (hb) std::cout << bid; else std::cout << '-';
-    std::cout << " ask ";
-    if (ha) std::cout << ask; else std::cout << '-';
-    std::cout << " spread ";
-    if (hb && ha) std::cout << (ask - bid); else std::cout << '-';
-    std::cout << '\n';
+    cout << "TOP bid ";
+    if (hb) cout << bid;
+    else cout << '-';
+
+    cout << " ask ";
+    if (ha) cout << ask;
+    else cout << '-';
+
+    cout << " spread ";
+    if (hb && ha) cout << (ask - bid);
+    else cout << '-';
+
+    cout << '\n';
 }
 
-static void printBook(const OrderBook& book, std::size_t n) {
+static void printBook(const OrderBook& book, size_t n) {
     auto bids = book.topBids(n);
     auto asks = book.topAsks(n);
 
-    std::ostringstream head;
-    head << "BIDS";
-    std::cout << std::left << std::setw(16) << head.str() << "ASKS\n";
+    cout << left << setw(16) << "BIDS" << "ASKS\n";
 
-    std::size_t rows = std::max(bids.size(), asks.size());
-    for (std::size_t i = 0; i < rows; ++i) {
-        std::ostringstream left, right;
-        if (i < bids.size()) left  << bids[i].first << "  " << bids[i].second;
-        if (i < asks.size()) right << asks[i].first << "  " << asks[i].second;
-        std::cout << std::left << std::setw(16) << left.str() << right.str() << '\n';
+    size_t rows = max(bids.size(), asks.size());
+
+    for (size_t i = 0; i < rows; ++i) {
+        ostringstream leftCol, rightCol;
+
+        if (i < bids.size())
+            leftCol << bids[i].first << "  " << bids[i].second;
+
+        if (i < asks.size())
+            rightCol << asks[i].first << "  " << asks[i].second;
+
+        cout << left << setw(16) << leftCol.str()<< rightCol.str() << '\n';
     }
+
     if (rows == 0)
-        std::cout << "(empty)\n";
+        cout << "(empty)\n";
 }
 
 int main(int argc, char** argv) {
-    std::istream* in = &std::cin;
-    std::ifstream file;
+    istream* in = &cin;
+    ifstream file;
+
     if (argc > 1) {
         file.open(argv[1]);
+
         if (!file) {
-            std::cerr << "Cannot open file: " << argv[1] << '\n';
+            cerr << "Cannot open file: " << argv[1] << '\n';
             return 1;
         }
+
         in = &file;
     }
 
-    OrderBook   book;
-    std::string line;
-    std::size_t lineNo = 0;
+    OrderBook book;
+    string line;
+    size_t lineNo = 0;
 
-    while (std::getline(*in, line)) {
+    while (getline(*in, line)) {
         ++lineNo;
 
-        auto hash = line.find('#');            // strip inline comments
-        if (hash != std::string::npos)
+        auto hash = line.find('#');
+        if (hash != string::npos)
             line.erase(hash);
 
-        std::istringstream ss(line);
-        std::string        cmd;
-        if (!(ss >> cmd))                      // blank / comment-only line
+        istringstream ss(line);
+        string cmd;
+
+        if (!(ss >> cmd))
             continue;
 
         if (cmd == "ADD") {
-            uint64_t    id = 0, qty = 0;
-            int64_t     price = 0;
-            std::string sideStr, typeStr;
+            uint64_t id = 0, qty = 0;
+            int64_t price = 0;
+            string sideStr, typeStr;
+
             if (!(ss >> id >> sideStr >> typeStr >> price >> qty)) {
-                std::cerr << "line " << lineNo << ": malformed ADD\n";
+                cerr << "line " << lineNo << ": malformed ADD\n";
                 continue;
             }
-            Side      side = (sideStr == "BUY") ? Side::Buy : Side::Sell;
-            OrderType type = (typeStr == "MARKET") ? OrderType::Market
-                                                   : OrderType::Limit;
-            for (const auto& t : book.add(id, side, type, price, qty))
+
+            Side side = (sideStr == "BUY")? Side::Buy: Side::Sell;
+
+            OrderType type = (typeStr == "MARKET") ? OrderType::Market: OrderType::Limit;
+
+            for (const auto& t :book.add(id, side, type, price, qty)) {
                 printTrade(t);
+            }
 
         } else if (cmd == "CANCEL") {
             uint64_t id = 0;
-            if (!(ss >> id)) { std::cerr << "line " << lineNo << ": malformed CANCEL\n"; continue; }
+
+            if (!(ss >> id)) {
+                cerr << "line " << lineNo << ": malformed CANCEL\n";
+                continue;
+            }
+
             book.cancel(id);
 
         } else if (cmd == "MODIFY") {
             uint64_t id = 0, qty = 0;
-            if (!(ss >> id >> qty)) { std::cerr << "line " << lineNo << ": malformed MODIFY\n"; continue; }
+
+            if (!(ss >> id >> qty)) {
+                cerr << "line " << lineNo<< ": malformed MODIFY\n";
+                continue;
+            }
+
             book.modify(id, qty);
 
         } else if (cmd == "TOP") {
             printTop(book);
 
         } else if (cmd == "PRINT") {
-            std::size_t n = 5;
-            ss >> n;                           // optional; defaults to 5
+            size_t n = 5;
+            ss >> n;
             printBook(book, n);
 
         } else {
-            std::cerr << "line " << lineNo << ": unknown command '" << cmd << "'\n";
+            cerr << "line " << lineNo<< ": unknown command '" << cmd << "'\n";
         }
     }
+
     return 0;
 }
