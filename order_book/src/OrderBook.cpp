@@ -4,22 +4,16 @@
 #include <iterator>
 
 template <typename BookMap, typename PriceOk>
-void OrderBook::match(Order& incoming, BookMap& opposite, PriceOk priceOk,
-                      std::vector<Trade>& trades) {
-    // Walk price levels from the best. opposite.begin() is always the best
-    // price because of the map's comparator (greater for bids, less for asks).
+void OrderBook::match(Order& incoming, BookMap& opposite, PriceOk priceOk,std::vector<Trade>& trades) {
     while (incoming.qty > 0 && !opposite.empty()) {
         auto    levelIt      = opposite.begin();
         int64_t restingPrice = levelIt->first;
 
-        // A limit order stops once the book no longer crosses its price.
-        // A market order keeps going regardless of price.
         if (incoming.type == OrderType::Limit && !priceOk(restingPrice))
             break;
 
         Level& queue = levelIt->second;
 
-        // FIFO within the level: always trade against the front (oldest) order.
         while (incoming.qty > 0 && !queue.empty()) {
             Order&   resting = queue.front();
             uint64_t traded  = std::min(incoming.qty, resting.qty);
@@ -31,19 +25,18 @@ void OrderBook::match(Order& incoming, BookMap& opposite, PriceOk priceOk,
             incoming.qty -= traded;
             resting.qty  -= traded;
 
-            if (resting.qty == 0) {          // resting order fully filled
+            if (resting.qty == 0) {       
                 index_.erase(resting.id);
                 queue.pop_front();
             }
         }
 
-        if (queue.empty())                   // level exhausted -> drop it
+        if (queue.empty())                  
             opposite.erase(levelIt);
     }
 }
 
-std::vector<Trade> OrderBook::add(uint64_t id, Side side, OrderType type,
-                                  int64_t price, uint64_t qty) {
+std::vector<Trade> OrderBook::add(uint64_t id, Side side, OrderType type,int64_t price, uint64_t qty) {
     std::vector<Trade> trades;
     if (qty == 0)
         return trades;
@@ -55,7 +48,7 @@ std::vector<Trade> OrderBook::add(uint64_t id, Side side, OrderType type,
     else
         match(order, bids_, [price](int64_t p) { return p >= price; }, trades);
 
-    // Limit remainder rests; market remainder is discarded.
+  
     if (order.type == OrderType::Limit && order.qty > 0)
         rest(order);
 
@@ -82,7 +75,7 @@ bool OrderBook::cancel(uint64_t id) {
     const Location& loc = it->second;
     if (loc.side == Side::Buy) {
         auto levelIt = bids_.find(loc.price);
-        levelIt->second.erase(loc.it);               // O(1) list erase
+        levelIt->second.erase(loc.it);            
         if (levelIt->second.empty())
             bids_.erase(levelIt);
     } else {
@@ -100,16 +93,16 @@ bool OrderBook::modify(uint64_t id, uint64_t newQty) {
     if (it == index_.end())
         return false;
 
-    if (newQty == 0) {                   // a modify-to-zero is a cancel
+    if (newQty == 0) {               
         cancel(id);
         return true;
     }
 
     Order& o = *(it->second.it);
     if (newQty <= o.qty) {
-        o.qty = newQty;                  // shrink in place -> keep time priority
+        o.qty = newQty;                 
     } else {
-        Order updated = o;               // grow -> re-add at back (lose priority)
+        Order updated = o;          
         updated.qty = newQty;
         updated.seq = seq_++;
         cancel(id);
